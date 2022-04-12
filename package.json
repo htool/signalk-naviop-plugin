@@ -1,0 +1,35 @@
+{
+  "name": "signalk-naviop-plugin",
+  "description": "Integrate B&G MFD Naviop digital switching panel with SignalK",
+  "version": "0.0.1",
+  "private": false,
+  "license": "UNLICENSED",
+  "keywords": [
+    "signalk-webapp",
+    "signalk-node-server-plugin",
+    "instruments",
+    "dashboard",
+    "marine",
+    "nautic"
+  ],
+  "signalk-plugin-enabled-by-default": true,
+  "author": {
+    "name": "Hans Tool",
+    "email": "hans@defect.org"
+  },
+  "main": "index.js",
+  "files": [
+    "build"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/htool/signalk-naviop-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/htool/signalk-naviop-plugin/issues"
+  },
+  "homepage": "https://github.com/htool/signalk-naviop-plugin#readme",
+  "dependencies": {
+    "debug": "^4.3.4"
+  }
+}

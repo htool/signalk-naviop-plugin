@@ -1,14 +1,13 @@
 {
   "name": "signalk-naviop-plugin",
   "description": "Integrate B&G MFD Naviop digital switching panel with SignalK",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": false,
   "license": "UNLICENSED",
   "keywords": [
-    "signalk-webapp",
     "signalk-node-server-plugin",
-    "instruments",
-    "dashboard",
+    "signalk-category-hardware",
+    "signalk-category-digital-switching",
     "marine",
     "nautic"
   ],

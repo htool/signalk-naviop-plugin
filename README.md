@@ -34,8 +34,6 @@ The plugin will listen for switch commands (126208) from the MFD, send the state
 o the MFD.
 
 ## Todo
- - Make Device address config work (now hardcoded)
  - Where to land fuse state/defails info in SignalK?
- - Read switch status from MFD on startup (MFD remembers state)
  - Add details for fuse state (load info etc)
  - More details on how/what to change to loops.xml

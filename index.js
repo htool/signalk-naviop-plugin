@@ -41,8 +41,6 @@ const defaultTransmitPGNs = [
   127501,
   127502 ]
 
-const deviceAddress = 29
-
 var digiSwitch = {
   bank: 1,
   relay: {
@@ -123,6 +121,9 @@ module.exports = function(app, options) {
     app.debug('Emulate: Naviop AT30 Digital Switching Gateway');
     
     const signalkAddress = options.signalkAddress
+    const deviceAddress = options.naviopAddress
+    module.exports.deviceAddress = deviceAddress
+
     app.debug('naviopAddress: %j', deviceAddress)
     app.debug('SignalK address: %j', signalkAddress)
 
@@ -273,34 +274,37 @@ module.exports = function(app, options) {
     	  // app.debug('msg.pgn.src %i != canbus.candevice.address %i?', msg.pgn.src, canbus.candevice.address)
         if ( msg.pgn.dst == canbus.candevice.address || msg.pgn.dst == 255) {
           msg.pgn.fields = {};
-          if (msg.pgn.pgn == 59904) {
-            var PGN = msg.data[2] * 256 * 256 + msg.data[1] * 256 + msg.data[0];
-            // app.debug('ISO request: %j', msg);
-            // app.debug('ISO request from %d to %d Data PGN: %i', msg.pgn.src, msg.pgn.dst, PGN);
-            msg.pgn.fields.PGN = PGN;
-            canbus.candevice.n2kMessage(msg.pgn);
-          }
-          if (msg.pgn.pgn == 126208) { // Digital switching command from MFD
-            var pgn = buf2hex(msg.data)
-            var PGN = pgn.join(',')
-            // app.debug('Digital switching command 126208 [%d -> %d]: %s', msg.pgn.src, msg.pgn.dst, PGN)
-            if (typeof mfdAddress == 'undefined') {
-              mfdAddress = msg.pgn.src
-              app.debug('MFD found on address %d', mfdAddress)
-            }
-            if (PGN.match(/.1,02,0.,03,0.,ff,ff,ff/)) {
-              var instance = parseInt(pgn[2]) + 1
-              var state = parseInt(pgn[4])
-              digiSwitch.relay[instance] = state
-              pushDelta(app, "electrical.switches.bank." + digiSwitch.bank + "." + instance + ".state", state)
-              app.debug('Digital switching command 126208 Instance %d -> %d]', parseInt(instance), parseInt(state))
-              app.debug('Switch states: %s', JSON.stringify(digiSwitch))
-            }
-          }
-          if (msg.pgn.pgn == 127501) { // Digital switching status update
-            var pgn = buf2hex(msg.data)
-            var PGN = pgn.join(',')
-            // app.debug('Digital switching status [%d] %d: %s', msg.pgn.src, msg.pgn.pgn, PGN)
+          switch (msg.pgn.pgn) {
+            case 59904:
+              var PGN = msg.data[2] * 256 * 256 + msg.data[1] * 256 + msg.data[0];
+              // app.debug('ISO request: %j', msg);
+              // app.debug('ISO request from %d to %d Data PGN: %i', msg.pgn.src, msg.pgn.dst, PGN);
+              msg.pgn.fields.PGN = PGN;
+              canbus.candevice.n2kMessage(msg.pgn);
+              break
+            case 126208:
+              // Digital switching command from MFD
+              var pgn = buf2hex(msg.data)
+              var PGN = pgn.join(',')
+              // app.debug('Digital switching command 126208 [%d -> %d]: %s', msg.pgn.src, msg.pgn.dst, PGN)
+              if (typeof mfdAddress == 'undefined') {
+                mfdAddress = msg.pgn.src
+                app.debug('MFD found on address %d', mfdAddress)
+              }
+              if (PGN.match(/.1,02,0.,03,0.,ff,ff,ff/)) {
+                var instance = parseInt(pgn[2]) + 1
+                var state = parseInt(pgn[4])
+                digiSwitch.relay[instance] = state
+                pushDelta(app, "electrical.switches.bank." + digiSwitch.bank + "." + instance + ".state", state)
+                app.debug('Digital switching command 126208 Instance %d -> %d]', parseInt(instance), parseInt(state))
+                app.debug('Switch states: %s', JSON.stringify(digiSwitch))
+              }
+              break
+            default:
+              if (msg.pgn.dst == canbus.candevice.address) {
+                app.debug('Received unknown packet: src: %d  pgn: %d', msg.pgn.src, msg.pgn.pgn, buf2hex(msg.data).join('.'))
+              }
+              break
           }
         }
     	}
@@ -332,7 +336,6 @@ module.exports = function(app, options) {
 };
 
 module.exports.defaultTransmitPGNs = defaultTransmitPGNs
-module.exports.deviceAddress = deviceAddress
 module.exports.addressClaim = addressClaim
 module.exports.productInfo = productInfo
 module.exports.app = "app"

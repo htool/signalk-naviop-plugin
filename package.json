@@ -1,7 +1,7 @@
 {
   "name": "signalk-naviop-plugin",
   "description": "Integrate B&G MFD Naviop digital switching panel with SignalK",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": false,
   "license": "UNLICENSED",
   "keywords": [
@@ -17,9 +17,6 @@
     "email": "hans@defect.org"
   },
   "main": "index.js",
-  "files": [
-    "build"
-  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/htool/signalk-naviop-plugin.git"

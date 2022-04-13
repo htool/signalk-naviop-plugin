@@ -1,6 +1,10 @@
 # Emulate Naviop AT30
 
 The aim of the plugin is to make the Naviop panel on the Navico MFD work with SignalK.
+## Requirements
+
+Currently the plugin requires a 'can0' interface to have canboatjs start a second device on the N2K bus.
+For now it looks like the plugin will not work using an Actisense type of interface.
 
 ## Setup
 

@@ -26,6 +26,7 @@
   },
   "homepage": "https://github.com/htool/signalk-naviop-plugin#readme",
   "dependencies": {
+    "@canboat/canboatjs": "^1.23.0",
     "debug": "^4.3.4"
   }
 }

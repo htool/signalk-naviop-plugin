@@ -1,45 +1,8 @@
 const id = "signalk-naviop-plugin";
 const debug = require('debug')(id)
+const util = require('util')
+const SimpleCan = require('@canboat/canboatjs').SimpleCan
 
-// AddressClaim PGN
-const addressClaim = {
-  pgn: 60928,
-  dst: 255,
-  "Unique Number": 1060571,
-  "Manufacturer Code": 275,
-  "Device Function": 140,
-  "Device Class": 30,
-  "Reserved1": 0,
-  "Device Instance Lower": 0,
-  "Device Instance Upper": 0,
-  "System Instance": 0,
-  "Industry Group": 4
-  // "Reserved2": 2
-}
-
-// Product info PGN
-const productInfo = {
-  pgn: 126996,
-  dst: 255,
-  "NMEA 2000 Version": 2100,
-  "Product Code": 4616,
-  "Model ID": "AT30 Digital Switching Gateway",
-  "Software Version Code": "0.1.00.00",
-  "Model Version": "",
-  "Model Serial Code": "104864089",
-  "Certification Level": 2,
-  "Load Equivalency": 1
-}
-
-const defaultTransmitPGNs = [
-  60928,
-  59904,
-  59392,
-  59904,
-  126720,
-  127500,
-  127501,
-  127502 ]
 
 var plugin = {}
 var intervalid;
@@ -67,6 +30,11 @@ module.exports = function(app, options) {
 	      type: 'number',
 	      title: 'Naviop emulation address'
 	    },
+      candevice: {
+        title: "CAN device to bind on",
+        type: "string",
+        default: 'can0'
+      },
       digiswitch: {
         title: 'Bank configuration',
         type: 'array',
@@ -228,11 +196,41 @@ module.exports = function(app, options) {
     app.debug('Emulate: Naviop AT30 Digital Switching Gateway');
     
     const signalkAddress = options.signalkAddress || 30
-    const deviceAddress = options.naviopAddress || 29
-    module.exports.deviceAddress = deviceAddress
+    const naviopAddress = options.naviopAddress || 29
 
-    app.debug('naviopAddress: %j', deviceAddress)
-    app.debug('SignalK address: %j', signalkAddress)
+    const simpleCan = new SimpleCan({
+      app,
+      canDevice: options.candevice,
+      preferredAddress: naviopAddress,
+      transmitPGNs: [ 130580, 127500, 127501, 127502 ],
+      addressClaim: {
+        'Unique Number': 1060571,
+        'Manufacturer Code': 'Navico',
+        'Device Function': 'Load Controller',
+        'Device Class': 'Electrical Distribution',
+        'Device Instance Lower': 0,
+        'Device Instance Upper': 0,
+        'System Instance': 0,
+        'Industry Group': 'Marine'
+      },
+      productInfo: {
+        'NMEA 2000 Version': 2100,
+        'Product Code': 4616,
+        'Model ID': 'AT30 Digital Switching Gateway',
+        'Software Version Code': '0.1.00.00',
+        'Model Version': '',
+        'Model Serial Code': '104864089',
+        'Certification Level': 2,
+        'Load Equivalency': 1
+      }
+    })
+
+    simpleCan.start()
+
+    app.setPluginStatus(`Connected to ${options.candevice}`)
+    app.debug(`Connected to ${options.candevice}`)
+    app.debug('simpleCan.candevice.address: %j', simpleCan.candevice.address)
+    const deviceAddress = simpleCan.candevice.address
 
     var digiSwitch = { }
 
@@ -245,9 +243,10 @@ module.exports = function(app, options) {
     }
 
     // Populate digiSwitch object with options alternative paths
-    app.debug('digiswitch: %j', options.digiswitch)
+    // app.debug('digiswitch: %j', options.digiswitch)
 
     options.digiswitch.forEach (bank => {
+      app.debug('bank: %j', bank)
       var bankNr = bank.bank
       digiSwitch[bankNr] = {}
       digiSwitch[bankNr].switches = {}
@@ -272,7 +271,7 @@ module.exports = function(app, options) {
       }
     });
 
-    app.debug('digiSwitch: %j', digiSwitch)
+    // app.debug('digiSwitch: %j', digiSwitch)
     app.debug('localSubscription: %j', localSubscription)
 
     app.subscriptionmanager.subscribe(
@@ -295,6 +294,7 @@ module.exports = function(app, options) {
     }
 
     function updateSwitchState(bankNr, instance, state) {
+      app.debug('digiSwitch: %s', JSON.stringify(digiSwitch))
       if (typeof digiSwitch[bankNr].switches[instance].state == 'undefined' || digiSwitch[bankNr].switches[instance].state != state) {
         app.debug('Updating digiSwitch[%d].switches[%d].state to %d', bankNr, instance, state)
         digiSwitch[bankNr].switches[instance].state = state
@@ -340,12 +340,6 @@ module.exports = function(app, options) {
       return
     }
 
-    require('./canboatjs')
-    require('./canboatjs/lib/canbus')
-    const canDevice = require('./canboatjs/lib/canbus').canDevice
-    const canbus = new (require('./canboatjs').canbus)({})
-    const util = require('util')
-    
     // Generic functions
     function buf2hex(buffer) { // buffer is an ArrayBuffer
       return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2));
@@ -433,9 +427,15 @@ module.exports = function(app, options) {
       // app.debug('bin64: ' + bin64 + ' hex64: ' + hex64 + ' hex: ' + hex)
       
       var PGN127501 = "%s,3,127501,%s,%s,8,01," + hex + ",00,ff,ff"
-      var pgn = util.format(PGN127501, (new Date()).toISOString(), canbus.candevice.address, signalkAddress)
-      // app.debug('pgn: %s', pgn)
-      canbus.sendPGN(pgn)
+      var pgn = util.format(PGN127501, (new Date()).toISOString(), deviceAddress, 255)
+      app.debug('PGN 127501: ' + pgn)
+      simpleCan.sendPGN(pgn)
+      /*
+      simpleCan.sendPGN({
+        pgn: 127501,
+        dst: mfdAddress
+      })
+      */
 
       var PNG127500 = [
         "%s,3,127500,%s,255,8,ff,00,00,00,00,ff,ff,ff",
@@ -447,70 +447,56 @@ module.exports = function(app, options) {
         "%s,3,127500,%s,255,8,ff,06,00,00,00,ff,ff,ff",
         "%s,3,127500,%s,255,8,ff,07,00,00,00,ff,ff,ff" ]
       PNG127500.forEach (function (PGN) {
-        var pgn = util.format(PGN, (new Date()).toISOString(), canbus.candevice.address)
-        // app.debug('pgn: %s', pgn)
-        canbus.sendPGN(pgn)
+        var pgn = util.format(PGN, (new Date()).toISOString(), deviceAddress)
+        app.debug('PGN 127501: ' + pgn)
+        simpleCan.sendPGN(pgn)
       })
+      /*
+      simpleCan.sendPGN({
+        pgn: 127500,
+        dst: mfdAddress
+      })
+      */
     }
     
     setInterval(sendUpdate, 1000) // State update every second
-    
-    function mainLoop () {
-    	while (canbus.readableLength > 0) {
-    	//app.debug('canbus.readableLength: %i', canbus.readableLength)
-        var msg = canbus.read()
-    		// app.debug('Received packet msg: %j', msg)
-    	  // app.debug('msg.pgn.src %i != canbus.candevice.address %i?', msg.pgn.src, canbus.candevice.address)
-        if ( msg.pgn.dst == canbus.candevice.address || msg.pgn.dst == 255) {
-          msg.pgn.fields = {};
-          switch (msg.pgn.pgn) {
-            case 59904:
-              var PGN = msg.data[2] * 256 * 256 + msg.data[1] * 256 + msg.data[0];
-              // app.debug('ISO request: %j', msg);
-              // app.debug('ISO request from %d to %d Data PGN: %i', msg.pgn.src, msg.pgn.dst, PGN);
-              msg.pgn.fields.PGN = PGN;
-              canbus.candevice.n2kMessage(msg.pgn);
-              break
-            case 126208:
-              // Digital switching command from MFD
-              var pgn = buf2hex(msg.data)
-              var PGN = pgn.join(',')
-              // app.debug('Digital switching command 126208 [%d -> %d]: %s', msg.pgn.src, msg.pgn.dst, PGN)
-              if (typeof mfdAddress == 'undefined') {
-                mfdAddress = msg.pgn.src
-                app.debug('MFD found on address %d', mfdAddress)
-              }
-              if (PGN.match(/.1,02,0.,03,0.,ff,ff,ff/)) {
-                var instance = parseInt(pgn[2]) + 1
-                var state = parseInt(pgn[4])
-                var bankNr = 1
-                app.debug('Digital switching command 126208 Instance %d -> %d]', parseInt(instance), parseInt(state))
-                updateSwitchState(bankNr, instance, state)
-                app.debug('Switch states: %s', JSON.stringify(digiSwitch))
-              }
-              break
-            default:
-              if (msg.pgn.dst == canbus.candevice.address) {
-                app.debug('Received unknown packet: src: %d  pgn: %d', msg.pgn.src, msg.pgn.pgn, buf2hex(msg.data).join('.'))
-              }
-              break
-          }
-        }
-    	}
-      setTimeout(mainLoop, 50)
-    }
-    
-    // Wait for cansend
-    function waitForSend () {
-      if (canbus.candevice.cansend) {
-        mainLoop()
-        return
-      }
-      setTimeout (waitForSend, 500)
-    }
-    
-    waitForSend()
 
+    function sendN2k(msgs) {
+      app.debug("n2k_msg: " + msgs)
+      msgs.map(function(msg) { app.emit('nmea2000out', msg)})
+    }
+
+    
+    app.on('N2KAnalyzerOut', (n2k) => {
+      if ( n2k.pgn === 126208 && (n2k.dst === simpleCan.candevice.address || n2k.dst == 255)) {
+    		app.debug('Received packet msg: %j', n2k)
+        switch (n2k.pgn) {
+          case 126208:
+            // Digital switching command from MFD
+            // app.debug('Digital switching command 126208 [%d -> %d]: %s', msg.pgn.src, msg.pgn.dst, PGN)
+            if (typeof mfdAddress == 'undefined') {
+              mfdAddress = n2k.src
+              app.debug('MFD found on address %d', mfdAddress)
+            }
+            if (n2k.fields.PGN == 127500) {
+              app.debug('n2k.fields.list: %j', n2k.fields.list)
+              var instance = n2k.fields.list[0].Value + 1
+              var state = n2k.fields.list[1].Value
+              app.debug(`instance: ${instance} state: ${state}`)
+              var bankNr = 1
+              app.debug('Digital switching command 126208 Instance %d -> %d]', parseInt(instance), parseInt(state))
+              updateSwitchState(bankNr, instance, state)
+              app.debug('Switch states: %s', JSON.stringify(digiSwitch))
+            }
+            break
+          default:
+            if (msg.pgn.dst == simpleCan.candevice.address) {
+              app.debug('Received unknown packet: src: %d  pgn: %d', msg.pgn.src, msg.pgn.pgn, buf2hex(msg.data).join('.'))
+            }
+            break
+        }
+      }
+    })
   }
 
   plugin.stop = function() {
@@ -523,9 +509,3 @@ module.exports = function(app, options) {
 
   return plugin;
 };
-
-module.exports.defaultTransmitPGNs = defaultTransmitPGNs
-module.exports.addressClaim = addressClaim
-module.exports.productInfo = productInfo
-module.exports.app = "app"
-module.exports.options = "options"

@@ -16,7 +16,6 @@ module.exports = function(app, options) {
 
   var unsubscribes = []
   var mfdFound = false
-  var bankNr = 1
 
   var schema = {
     type: "object",
@@ -32,8 +31,109 @@ module.exports = function(app, options) {
         title: "CAN device to bind on",
         type: "string",
         default: 'can0'
-      }
-    }
+      },
+      naviop: {
+        title: 'Bank configuration',
+        properties: {
+          bank: {
+	          type: 'number',
+	          title: 'Bank number',
+            description: 'The bank number can be used to avoid interferring with an existing bank number',
+	          default: 1
+	        },
+	        switches: {
+	          title: 'Switches',
+	          properties: {
+			        1: {
+			          type: 'string',
+			          title: 'Switch 1 (connected to Fuse 1)',
+			          default: 'electrical.naviop.switches.1.state'
+			        },
+			        2: {
+			          type: 'string',
+			          title: 'Switch 2 (connected to Fuse 3)',
+			          default: 'electrical.naviop.switches.2.state'
+			        },
+			        3: {
+			          type: 'string',
+			          title: 'Switch 3 (connected to Fuse 5)',
+			          default: 'electrical.naviop.switches.3.state'
+			        },
+			        4: {
+			          type: 'string',
+			          title: 'Switch 4 (connected to Fuse 7)',
+			          default: 'electrical.naviop.switches.4.state'
+			        },
+			        5: {
+			          type: 'string',
+			          title: 'Switch 5 (connected to Fuse 2)',
+			          default: 'electrical.naviop.switches.5.state'
+			        },
+			        6: {
+			          type: 'string',
+			          title: 'Switch 6 (connected to Fuse 9)',
+			          default: 'electrical.naviop.switches.6.state'
+			        },
+			        7: {
+			          type: 'string',
+			          title: 'Switch 7 (connected to Fuse 13)',
+			          default: 'electrical.naviop.switches.7.state'
+			        },
+			        8: {
+			          type: 'string',
+			          title: 'Switch 8 (connected to Fuse 14)',
+			          default: 'electrical.naviop.switches.8.state'
+			        }
+			      }
+			    },
+			    fuses: {
+			      title: 'Fuses',
+			      properties: {
+			        1: {
+			          type: 'string',
+			          title: 'Fuse 1',
+			          default: 'electrical.naviop.fuses.1.state'
+			        },
+			        2: {
+			          type: 'string',
+			          title: 'Fuse 2',
+			          default: 'electrical.naviop.fuses.2.state'
+			        },
+			        3: {
+			          type: 'string',
+			          title: 'Fuse 3',
+			          default: 'electrical.naviop.fuses.3.state'
+			        },
+			        4: {
+			          type: 'string',
+			          title: 'Fuse 4',
+			          default: 'electrical.naviop.fuses.4.state'
+			        },
+			        5: {
+			          type: 'string',
+			          title: 'Fuse 5',
+			          default: 'electrical.naviop.fuses.5.state'
+			        },
+			        6: {
+			          type: 'string',
+			          title: 'Fuse 6',
+			          default: 'electrical.naviop.fuses.6.state'
+			        },
+			        7: {
+			          type: 'string',
+			          title: 'Fuse 7',
+			          default: 'electrical.naviop.fuses.7.state'
+	            },
+			        8: {
+			          type: 'string',
+			          title: 'Fuse 8',
+			          default: 'electrical.naviop.fuses.8.state'
+			        }
+			      }
+			    }
+			  }
+	    }
+	  }
   }
 
   plugin.schema = function() {
@@ -41,8 +141,8 @@ module.exports = function(app, options) {
   }
 
   plugin.start = function(options, restartPlugin) {
-
     var mfdAddress
+
     app.debug('Starting plugin');
     app.debug('Options: %j', JSON.stringify(options));
 
@@ -82,32 +182,36 @@ module.exports = function(app, options) {
     simpleCan.start()
 
     app.setPluginStatus(`Connected to ${options.candevice}`)
-    app.debug(`Connected to ${options.candevice}`)
     app.debug('simpleCan.candevice.address: %j', simpleCan.candevice.address)
     const deviceAddress = simpleCan.candevice.address
 
-    var digiSwitch = { }
+    var digiSwitch = {}
+    var bankNr = options.naviop.bank
+    digiSwitch[bankNr] = {}
+    digiSwitch[bankNr].switches = {}
+    digiSwitch[bankNr].fuses = {}
 
-    var devices = { switch: 'switches', fuse: 'fuses' }
-    Object.values(devices).forEach(device => {
-      digiSwitch[bankNr] = digiSwitch[bankNr] || {}
-      digiSwitch[bankNr][device] = digiSwitch[bankNr][device] || {}
-      for (let i = 1; i <= 8; i++) {
-        digiSwitch[bankNr][device][i] = digiSwitch[bankNr][device][i] || {}
-        digiSwitch[bankNr][device][i].state = 0
-      }
-    })
-    app.debug('digiSwitch: %j', digiSwitch)
+    app.debug('bankNr: %d', bankNr)
 
     var localSubscription = {
       context: '*', // Get data for all contexts
       subscribe: [
-        {
-          path: 'electrical.naviop.*'
-        }
       ]
     }
 
+
+    for (var [switchNr, path] of Object.entries(options.naviop.switches)) {
+      path = path.toLowerCase()
+      digiSwitch[bankNr].switches[switchNr] = {path: path, state: 0}
+      localSubscription.subscribe.push({path: path})
+    }
+    for (var [fuseNr, path] of Object.entries(options.naviop.fuses)) {
+      path = path.toLowerCase()
+      digiSwitch[bankNr].fuses[fuseNr] = {path: path, state: 0}
+      localSubscription.subscribe.push({path: path})
+    }
+
+    app.debug('digiSwitch: %j', digiSwitch)
     app.debug('localSubscription: %j', localSubscription)
 
     app.subscriptionmanager.subscribe(
@@ -135,10 +239,9 @@ module.exports = function(app, options) {
       if (digiSwitch[bankNr].switches[instance].state != state) {
         app.debug('Updating digiSwitch[%d].switches[%d].state to %d', bankNr, instance, state)
         digiSwitch[bankNr].switches[instance].state = state
-        var path = 'electrical.naviop.switches.' + instance + '.state'
+        var path = digiSwitch[bankNr].switches[instance].path
         var values = []
         values.push({path: path, value: state})
-        app.debug('values: %j', values)
         pushDelta(app, values)
       }
     }
@@ -148,7 +251,7 @@ module.exports = function(app, options) {
       if (digiSwitch[bankNr].fuses[instance].state != state) {
         app.debug('Updating digiSwitch[%d].fuses[%d].state to %d', bankNr, instance, state)
         digiSwitch[bankNr].fuses[instance].state = state
-        var path = 'electrical.naviop.fuses.' + instance + '.state'
+        var path = digiSwitch[bankNr].fuses[instance].path
         var values = []
         values.push({path: path, value: state})
         app.debug('values: %j', values)
@@ -157,13 +260,22 @@ module.exports = function(app, options) {
     }
 
     function updatePathState(path, state) {
-    // updatePathState: electrical.naviop.switches.3.state in 1
-      app.debug('updatePathState: %s in %d', path, state)
-      let [e, n, device, instance] = path.split('.')
-      app.debug(`${e}.${n}.${device}.${instance}.state to ${state}`)
-      digiSwitch[bankNr][device][instance].state = state
-      app.debug('State change path %s -> %s', path, state)
-      sendUpdate()
+      app.debug('updatePathState: %s to %d', path, state)
+      for (const [device, deviceObject] of Object.entries(digiSwitch[bankNr])) {
+        app.debug(`Checking ${device} deviceObject: %j`, deviceObject)
+        for (const [instance, instanceObject] of Object.entries(deviceObject)) {
+          app.debug(`Checking ${device} ${instance}: %j`, instanceObject)
+          app.debug(`Checking ${instanceObject.path} == ${path} ?`)
+          if (instanceObject.path == path) {
+            app.debug('updatePathState: %s in %j', path, instanceObject)
+            if (typeof (instanceObject.state) == 'undefined' || instanceObject.state != state) {
+              app.debug('State change path %s -> %s', path, state)
+              instanceObject.state = state
+              sendUpdate()
+            }
+          }
+        }
+      }
     }
 
     function pushDelta(app, values) {

@@ -179,15 +179,10 @@ module.exports = function(app, options) {
       }
     })
 
-    try {
-      simpleCan.start()
-      app.setPluginStatus(`Connected to ${options.candevice}`)
-      app.debug('simpleCan.candevice.address: %j', simpleCan.candevice.address)
-      const deviceAddress = simpleCan.candevice.address
-    } catch {
-      app.debug(`Error using device ${options.candevice}`)
-    }
-
+    simpleCan.start()
+    app.setPluginStatus(`Connected to ${options.candevice}`)
+    app.debug('simpleCan.candevice.address: %j', simpleCan.candevice.address)
+    const deviceAddress = simpleCan.candevice.address
 
     var digiSwitch = {}
     var bankNr = options.naviop.bank

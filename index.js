@@ -28,9 +28,9 @@ module.exports = function(app, options) {
 	      title: 'Naviop emulation address'
 	    },
       candevice: {
-        title: "CAN device to bind on",
+        title: "Override CAN device to bind on. Will try to auto detect by default.",
         type: "string",
-        default: 'can0'
+        default: ''
       },
       naviop: {
         title: 'Bank configuration',
@@ -143,6 +143,7 @@ module.exports = function(app, options) {
   plugin.start = function(options, restartPlugin) {
     var mfdAddress
 
+
     app.debug('Starting plugin');
     app.debug('Options: %j', JSON.stringify(options));
 
@@ -151,9 +152,34 @@ module.exports = function(app, options) {
     
     const naviopAddress = options.naviopAddress || 29
 
+
+    var deviceAddress
+    var canDevice
+
+    if (options.candevice != "") {
+      canDevice = options.candevice
+      app.debug('Using configured canDevice: %s', canDevice)
+    } else {
+      // app.debug('%j', app.config.settings.pipedProviders)
+      app.debug('Trying to detect canDevice')
+      app.config.settings.pipedProviders.forEach(provider => {
+        if (provider.enabled == true) {
+          provider.pipeElements.forEach(element => {
+            if (element.type == 'providers/canbus' && typeof deviceAddress == 'undefined') {
+              app.debug('Found provider/canbus')
+              if (typeof element.options.canDevice != 'undefined') {
+	              app.debug('element.options.canDevice: ', element.options.canDevice)
+                canDevice = options.candevice
+              }
+            }
+          })
+        }
+      })
+    }
+
     const simpleCan = new SimpleCan({
       app,
-      canDevice: options.candevice,
+      canDevice: canDevice,
       preferredAddress: naviopAddress,
       transmitPGNs: [ 130580, 127500, 127501, 127502 ],
       addressClaim: {
@@ -178,11 +204,10 @@ module.exports = function(app, options) {
         'Load Equivalency': 1
       }
     })
-
     simpleCan.start()
-    app.setPluginStatus(`Connected to ${options.candevice}`)
+    app.setPluginStatus(`Connected to ${canDevice}`)
     app.debug('simpleCan.candevice.address: %j', simpleCan.candevice.address)
-    const deviceAddress = simpleCan.candevice.address
+    deviceAddress = simpleCan.candevice.address
 
     var digiSwitch = {}
     var bankNr = options.naviop.bank

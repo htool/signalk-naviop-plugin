@@ -34,6 +34,9 @@ You can make changes to this file to e.g. rename the fuse names. Adding your own
 The plugin with emulate an AT30 Digital Switching Gateway device which is neccesary for the MFD to work.
 You can set the paths for the different switches/fuses in the plugin config.
 
+For the Victron Cerbos you may need to add a data connection (canbus) and use that canbus interface.
+
+
 #### What the plugin does
 The plugin will listen for switch commands (126208) from the MFD, send the state change to SignalK (electrical.naviop.(switches|fuses).$instance.state) and send out an update (127501) from Naviop to the MFD.
 Due to non-standard usage of the 127501 PGN it doesn't work well with the standard electrical.switches.bank. setup.

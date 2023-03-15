@@ -1,7 +1,7 @@
 {
   "name": "signalk-naviop-plugin",
   "description": "Integrate B&G MFD Naviop digital switching panel with SignalK",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "private": false,
   "license": "UNLICENSED",
   "keywords": [

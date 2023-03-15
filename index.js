@@ -156,7 +156,7 @@ module.exports = function(app, options) {
     var deviceAddress
     var canDevice
 
-    if (options.candevice != "") {
+    if (typeof options.candevice != 'undefined' && options.candevice != "") {
       canDevice = options.candevice
       app.debug('Using configured canDevice: %s', canDevice)
     } else {
@@ -168,8 +168,8 @@ module.exports = function(app, options) {
             if (element.type == 'providers/canbus' && typeof deviceAddress == 'undefined') {
               app.debug('Found provider/canbus')
               if (typeof element.options.canDevice != 'undefined') {
-	              app.debug('element.options.canDevice: ', element.options.canDevice)
-                canDevice = options.candevice
+	              app.debug('element.options.canDevice: %s', element.options.canDevice)
+                canDevice = element.options.canDevice
               }
             }
           })

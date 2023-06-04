@@ -253,7 +253,13 @@ module.exports = function(app, options) {
 
     function handleUpdate (data) {
       var path = data[0]['path']
-      var state = parseInt(data[0]['value'])
+      var state = data[0]['value']
+      if (state == '1' || state.toLowerCase() == 'on' || state.toLowerCase() == 'online' || state.toLowerCase() == 'true') {
+        state = 1
+      } else if (state == '0' || state.toLowerCase() == 'off' || state.toLowerCase() == 'offline' || state.toLowerCase() == 'false') {
+        state = 0
+      }
+      state = Number(state)
       app.debug(`handleUpdate: ${path} -> ${state}`)
       updatePathState(path, state)
     }

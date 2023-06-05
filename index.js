@@ -246,7 +246,9 @@ module.exports = function(app, options) {
       },
       delta => {
         delta.updates.forEach(u => {
-          handleUpdate(u.values)
+          if (typeof u.values != 'undefined') {
+            handleUpdate(u.values)
+          }
         });
       }
     );
@@ -254,12 +256,14 @@ module.exports = function(app, options) {
     function handleUpdate (data) {
       var path = data[0]['path']
       var state = data[0]['value']
-      if (state == '1' || state.toLowerCase() == 'on' || state.toLowerCase() == 'online' || state.toLowerCase() == 'true') {
-        state = 1
-      } else if (state == '0' || state.toLowerCase() == 'off' || state.toLowerCase() == 'offline' || state.toLowerCase() == 'false') {
-        state = 0
+      app.debug('path: %s  state: %s', path, state)
+      if (typeof state == 'string') {
+        if (state == '1' || state.toLowerCase() == 'on' || state.toLowerCase() == 'online' || state.toLowerCase() == 'true') {
+          state = 1
+        } else if (state == '0' || state.toLowerCase() == 'off' || state.toLowerCase() == 'offline' || state.toLowerCase() == 'false') {
+          state = 0
+        }
       }
-      state = Number(state)
       app.debug(`handleUpdate: ${path} -> ${state}`)
       updatePathState(path, state)
     }
@@ -292,10 +296,10 @@ module.exports = function(app, options) {
     function updatePathState(path, state) {
       app.debug('updatePathState: %s to %d', path, state)
       for (const [device, deviceObject] of Object.entries(digiSwitch[bankNr])) {
-        app.debug(`Checking ${device} deviceObject: %j`, deviceObject)
+        // app.debug(`Checking ${device} deviceObject: %j`, deviceObject)
         for (const [instance, instanceObject] of Object.entries(deviceObject)) {
-          app.debug(`Checking ${device} ${instance}: %j`, instanceObject)
-          app.debug(`Checking ${instanceObject.path} == ${path} ?`)
+          // app.debug(`Checking ${device} ${instance}: %j`, instanceObject)
+          // app.debug(`Checking ${instanceObject.path} == ${path} ?`)
           if (instanceObject.path == path) {
             app.debug('updatePathState: %s in %j', path, instanceObject)
             if (typeof (instanceObject.state) == 'undefined' || instanceObject.state != state) {

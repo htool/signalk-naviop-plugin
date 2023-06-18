@@ -2,6 +2,8 @@ const id = "signalk-naviop-plugin";
 const debug = require('debug')(id)
 const util = require('util')
 const SimpleCan = require('@canboat/canboatjs').SimpleCan
+const axios = require('axios')
+
 
 
 var plugin = {}
@@ -215,6 +217,8 @@ module.exports = function(app, options) {
     digiSwitch[bankNr].switches = {}
     digiSwitch[bankNr].fuses = {}
 
+    var shellies = []
+
     app.debug('bankNr: %d', bankNr)
 
     var localSubscription = {
@@ -247,16 +251,18 @@ module.exports = function(app, options) {
       delta => {
         delta.updates.forEach(u => {
           if (typeof u.values != 'undefined') {
-            handleUpdate(u.values)
+            handleUpdate(u)
           }
         });
       }
     );
 
     function handleUpdate (data) {
-      var path = data[0]['path']
-      var state = data[0]['value']
-      app.debug('path: %s  state: %s', path, state)
+      // app.debug('handleUpdate: %s', JSON.stringify(data))
+      var path = data.values[0]['path']
+      var state = data.values[0]['value']
+      var source = data["$source"]
+      app.debug('path: %s  state: %s  source: %s', path, state, source)
       if (typeof state == 'string') {
         if (state == '1' || state.toLowerCase() == 'on' || state.toLowerCase() == 'online' || state.toLowerCase() == 'true') {
           state = 1
@@ -264,8 +270,8 @@ module.exports = function(app, options) {
           state = 0
         }
       }
-      app.debug(`handleUpdate: ${path} -> ${state}`)
-      updatePathState(path, state)
+      // app.debug(`handleUpdate: ${path} -> ${state}`)
+      updatePathState(path, state, source)
     }
 
     function updateSwitchState(bankNr, instance, state) {
@@ -277,6 +283,10 @@ module.exports = function(app, options) {
         var values = []
         values.push({path: path, value: state})
         pushDelta(app, values)
+        if (shellies.includes(path)) {
+          app.debug('shellies.includes')
+          sendPutRequest(path, state)
+        }
       }
     }
 
@@ -293,8 +303,8 @@ module.exports = function(app, options) {
       }
     }
 
-    function updatePathState(path, state) {
-      app.debug('updatePathState: %s to %d', path, state)
+    function updatePathState(path, state, source) {
+      // app.debug('updatePathState: %s to %d (source: %s)', path, state, source)
       for (const [device, deviceObject] of Object.entries(digiSwitch[bankNr])) {
         // app.debug(`Checking ${device} deviceObject: %j`, deviceObject)
         for (const [instance, instanceObject] of Object.entries(deviceObject)) {
@@ -306,10 +316,22 @@ module.exports = function(app, options) {
               app.debug('State change path %s -> %s', path, state)
               instanceObject.state = state
               sendUpdate()
+              if (source == "signalk-shelly") {
+                shellies.push(path)
+                app.debug('shellies: %s', JSON.stringify(shellies))
+              }
             }
           }
         }
       }
+    }
+
+    function sendPutRequest (path, state) {
+      path = 'http://localhost:3000/signalk/v1/api/vessels/self/' + path.replaceAll('.', '/')
+      app.debug('sendPutRequest: path: %s  state: %s', path, state)
+      const res = axios.put(path, {
+        "value": state
+      })
     }
 
     function pushDelta(app, values) {

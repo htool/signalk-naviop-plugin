@@ -283,10 +283,8 @@ module.exports = function(app, options) {
         var values = []
         values.push({path: path, value: state})
         pushDelta(app, values)
-        if (shellies.includes(path)) {
-          app.debug('shellies.includes')
-          sendPutRequest(path, state)
-        }
+        app.debug('PUT switch path %s -> %s', path, state)
+        sendPutRequest(path, state)
       }
     }
 
@@ -360,10 +358,6 @@ module.exports = function(app, options) {
     }
    
     function sendUpdate () {
-      if (!mfdFound) {
-        return
-      }
-
       var bankNr = 1
 
       /*
@@ -446,7 +440,7 @@ module.exports = function(app, options) {
       */
       simpleCan.sendPGN({
         pgn: 127501,
-        dst: mfdAddress,
+        dst: (typeof mfdAddress != 'undefined' ? mfdAddress : 255),
         'Instance': bankNr,
         'Indicator1': digiSwitch[bankNr].switches[1].state,
         'Indicator2': digiSwitch[bankNr].switches[5].state,
@@ -466,20 +460,18 @@ module.exports = function(app, options) {
         'Indicator16': digiSwitch[bankNr].fuses[8].state
       })
 
-      var PNG127500 = [
-        "%s,3,127500,%s,255,8,ff,00,00,00,00,ff,ff,ff",
-        "%s,3,127500,%s,255,8,ff,01,00,00,00,ff,ff,ff",
-        "%s,3,127500,%s,255,8,ff,02,00,00,00,ff,ff,ff",
-        "%s,3,127500,%s,255,8,ff,03,00,00,00,ff,ff,ff",
-        "%s,3,127500,%s,255,8,ff,04,00,00,00,ff,ff,ff",
-        "%s,3,127500,%s,255,8,ff,05,00,00,00,ff,ff,ff",
-        "%s,3,127500,%s,255,8,ff,06,00,00,00,ff,ff,ff",
-        "%s,3,127500,%s,255,8,ff,07,00,00,00,ff,ff,ff" ]
-      PNG127500.forEach (function (PGN) {
-        var pgn = util.format(PGN, (new Date()).toISOString(), deviceAddress)
-        // app.debug('PGN 127501: ' + pgn)
+      for (var sw = 1; sw <= 8; sw++) {
+        var connId = sw - 1
+        var st = parseInt(digiSwitch[bankNr].switches[sw].state, 10) ? 1 : 0
+        var pgn = util.format(
+          '%s,3,127500,%s,255,8,ff,%s,%s,00,00,ff,ff,ff',
+          (new Date()).toISOString(),
+          deviceAddress,
+          padd(connId.toString(16), 2),
+          padd(st.toString(16), 2)
+        )
         simpleCan.sendPGN(pgn)
-      })
+      }
       /*
       simpleCan.sendPGN({
         pgn: 127500,
@@ -488,7 +480,7 @@ module.exports = function(app, options) {
       */
     }
     
-    setInterval(sendUpdate, 1000) // State update every second
+    intervalid = setInterval(sendUpdate, 1000) // State update every second
 
     function sendN2k(msgs) {
       app.debug("n2k_msg: " + msgs)
@@ -513,18 +505,38 @@ module.exports = function(app, options) {
           case 126208:
             // Digital switching command from MFD
             // app.debug('Digital switching command 126208 [%d -> %d]: %s', msg.pgn.src, msg.pgn.dst, PGN)
-            if (typeof mfdAddress == 'undefined') {
+            if (typeof mfdAddress == 'undefined' || !mfdFound) {
               mfdAddress = n2k.src
+              mfdFound = true
               app.debug('MFD found on address %d', mfdAddress)
             }
-            if (n2k.fields.PGN == 127500) {
-              app.debug('n2k.fields.list: %j', n2k.fields.list)
-              var instance = n2k.fields.list[0].Value + 1
-              var state = n2k.fields.list[1].Value
-              app.debug(`instance: ${instance} state: ${state}`)
+            if (n2k.fields.PGN == 127500 || n2k.fields.pgn == 127500) {
+              app.debug('n2k.fields: %j', n2k.fields)
+              var list = n2k.fields.list || []
+              var connectionId
+              var state
+              for (var i = 0; i < list.length; i++) {
+                var param = list[i].Parameter !== undefined ? list[i].Parameter : list[i].parameter
+                var value = list[i].Value !== undefined ? list[i].Value : list[i].value
+                if (param == 2) connectionId = value
+                if (param == 3) state = value
+              }
+              if (connectionId === undefined && list[0]) {
+                connectionId = list[0].Value !== undefined ? list[0].Value : list[0].value
+              }
+              if (state === undefined && list[1]) {
+                state = list[1].Value !== undefined ? list[1].Value : list[1].value
+              }
+              var instance = parseInt(connectionId, 10) + 1
+              state = parseInt(state, 10)
+              app.debug('instance: %s state: %s', instance, state)
               var bankNr = 1
-              app.debug('Digital switching command 126208 Instance %d -> %d]', parseInt(instance), parseInt(state))
-              updateSwitchState(bankNr, instance, state)
+              app.debug('Digital switching command 126208 Instance %d -> %d]', instance, state)
+              if (!isNaN(instance) && !isNaN(state)) {
+                updateSwitchState(bankNr, instance, state)
+              } else {
+                app.debug('Ignoring 126208/127500 with unparsed connection/state')
+              }
               app.debug('Switch states: %s', JSON.stringify(digiSwitch))
             }
             break

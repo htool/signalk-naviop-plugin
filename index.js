@@ -235,7 +235,8 @@ module.exports = function(app, options) {
     }
     for (var [fuseNr, path] of Object.entries(options.naviop.fuses)) {
       path = path.toLowerCase()
-      digiSwitch[bankNr].fuses[fuseNr] = {path: path, state: 0}
+      // Healthy fuse = On. Loop S treats 127501 Off as blown (red keys).
+      digiSwitch[bankNr].fuses[fuseNr] = {path: path, state: 1}
       localSubscription.subscribe.push({path: path})
     }
 
@@ -356,6 +357,29 @@ module.exports = function(app, options) {
       var pad = new Array(1 + p).join(pad_char);
       return (pad + n).slice(-pad.length);
     }
+
+    function n2kOn (value) {
+      if (value === true || value === 'on' || value === 'On' || value === 'true') return 1
+      if (value === false || value === 'off' || value === 'Off' || value === 'false') return 0
+      var n = parseInt(value, 10)
+      return n ? 1 : 0
+    }
+
+    // Loop S switch keys <load> FuseCh on 127501 (Indicator n = FuseCh n).
+    // All-Off 127501 looks like a dead bank (every key red). All-On looks
+    // like every circuit is on (every key blue). Switch channels carry
+    // on/off; fuse-only channels stay On when healthy.
+    function fuseOk (fuseNr) {
+      var fuse = digiSwitch[bankNr].fuses[fuseNr]
+      if (!fuse) return 1
+      return n2kOn(fuse.state)
+    }
+
+    function swOn (switchNr) {
+      var sw = digiSwitch[bankNr].switches[switchNr]
+      if (!sw) return 0
+      return n2kOn(sw.state)
+    }
    
     function sendUpdate () {
       var bankNr = 1
@@ -442,27 +466,27 @@ module.exports = function(app, options) {
         pgn: 127501,
         dst: (typeof mfdAddress != 'undefined' ? mfdAddress : 255),
         'Instance': bankNr,
-        'Indicator1': digiSwitch[bankNr].switches[1].state,
-        'Indicator2': digiSwitch[bankNr].switches[5].state,
-        'Indicator3': digiSwitch[bankNr].switches[2].state,
-        'Indicator4': digiSwitch[bankNr].fuses[1].state,
-        'Indicator5': digiSwitch[bankNr].switches[3].state,
-        'Indicator6': digiSwitch[bankNr].fuses[2].state, 
-        'Indicator7': digiSwitch[bankNr].switches[4].state,
-        'Indicator8': digiSwitch[bankNr].fuses[3].state,
-        'Indicator9': digiSwitch[bankNr].switches[6].state,
-        'Indicator10': digiSwitch[bankNr].fuses[4].state,
-        'Indicator11': digiSwitch[bankNr].fuses[5].state,
-        'Indicator12': digiSwitch[bankNr].fuses[6].state,
-        'Indicator13': digiSwitch[bankNr].switches[7].state,
-        'Indicator14': digiSwitch[bankNr].switches[8].state,
-        'Indicator15': digiSwitch[bankNr].fuses[7].state,
-        'Indicator16': digiSwitch[bankNr].fuses[8].state
+        'Indicator1': swOn(1),
+        'Indicator2': swOn(5),
+        'Indicator3': swOn(2),
+        'Indicator4': fuseOk(1),
+        'Indicator5': swOn(3),
+        'Indicator6': fuseOk(2),
+        'Indicator7': swOn(4),
+        'Indicator8': fuseOk(3),
+        'Indicator9': swOn(6),
+        'Indicator10': fuseOk(4),
+        'Indicator11': fuseOk(5),
+        'Indicator12': fuseOk(6),
+        'Indicator13': swOn(7),
+        'Indicator14': swOn(8),
+        'Indicator15': fuseOk(7),
+        'Indicator16': fuseOk(8)
       })
 
       for (var sw = 1; sw <= 8; sw++) {
         var connId = sw - 1
-        var st = parseInt(digiSwitch[bankNr].switches[sw].state, 10) ? 1 : 0
+        var st = swOn(sw)
         var pgn = util.format(
           '%s,3,127500,%s,255,8,ff,%s,%s,00,00,ff,ff,ff',
           (new Date()).toISOString(),

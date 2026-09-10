@@ -7,7 +7,8 @@ const axios = require('axios')
 
 
 var plugin = {}
-var intervalid;
+var intervalid
+var n2kOn = require('./lib/n2k-on')
 
 module.exports = function(app, options) {
   "use strict"
@@ -259,20 +260,22 @@ module.exports = function(app, options) {
     );
 
     function handleUpdate (data) {
-      // app.debug('handleUpdate: %s', JSON.stringify(data))
-      var path = data.values[0]['path']
-      var state = data.values[0]['value']
-      var source = data["$source"]
-      app.debug('path: %s  state: %s  source: %s', path, state, source)
-      if (typeof state == 'string') {
-        if (state == '1' || state.toLowerCase() == 'on' || state.toLowerCase() == 'online' || state.toLowerCase() == 'true') {
-          state = 1
-        } else if (state == '0' || state.toLowerCase() == 'off' || state.toLowerCase() == 'offline' || state.toLowerCase() == 'false') {
-          state = 0
-        }
+      var source = data['$source']
+      var i
+      var path
+      var state
+      if (!data.values) {
+        return
       }
-      // app.debug(`handleUpdate: ${path} -> ${state}`)
-      updatePathState(path, state, source)
+      for (i = 0; i < data.values.length; i++) {
+        path = data.values[i].path
+        if (typeof path === 'string') {
+          path = path.toLowerCase()
+        }
+        state = n2kOn(data.values[i].value)
+        app.debug('path: %s  state: %s  source: %s', path, state, source)
+        updatePathState(path, state, source)
+      }
     }
 
     function updateSwitchState(bankNr, instance, state) {
@@ -356,13 +359,6 @@ module.exports = function(app, options) {
       var pad_char = typeof c !== 'undefined' ? c : '0';
       var pad = new Array(1 + p).join(pad_char);
       return (pad + n).slice(-pad.length);
-    }
-
-    function n2kOn (value) {
-      if (value === true || value === 'on' || value === 'On' || value === 'true') return 1
-      if (value === false || value === 'off' || value === 'Off' || value === 'false') return 0
-      var n = parseInt(value, 10)
-      return n ? 1 : 0
     }
 
     // Loop S switch keys <load> FuseCh on 127501 (Indicator n = FuseCh n).

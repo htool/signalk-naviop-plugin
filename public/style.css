@@ -1,0 +1,102 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0e12;
+  --key: #1b222b;
+  --key-border: #2c3642;
+  --text: #e8eef4;
+  --muted: #93a1b0;
+  --led-off: #000;
+  --led-on: #1c6dff;
+  --error: #e15b5b;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+header {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  padding: 0.85rem 1.1rem 0.7rem;
+  border-bottom: 1px solid var(--key-border);
+}
+.header-main { min-width: 12rem; }
+h1 { margin: 0 0 0.2rem; font-size: 1.25rem; }
+.meta, .muted { color: var(--muted); font-size: 0.85rem; margin: 0; }
+.error { color: var(--error); font-size: 0.85rem; }
+.login-form {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.login-form input {
+  font: inherit;
+  background: var(--key);
+  color: var(--text);
+  border: 1px solid var(--key-border);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  width: 8.5rem;
+}
+button {
+  font: inherit;
+  background: var(--key);
+  color: var(--text);
+  border: 1px solid var(--key-border);
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+main { padding: 1rem 1.1rem 1.4rem; flex: 1; }
+.panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  max-width: 56rem;
+}
+.sw {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-height: 5.6rem;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--key-border);
+  background: var(--key);
+  color: var(--text);
+  text-align: left;
+  overflow: hidden;
+}
+.sw:disabled { opacity: 0.65; cursor: wait; }
+.led {
+  flex: 0 0 10px;
+  width: 10px;
+  background: var(--led-off);
+}
+.sw.on .led {
+  background: var(--led-on);
+  box-shadow: inset 0 0 8px #7eb6ff;
+}
+.title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 0.85rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+}
+@media (max-width: 700px) {
+  .panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -6,11 +6,16 @@
   "license": "UNLICENSED",
   "keywords": [
     "signalk-node-server-plugin",
+    "signalk-webapp",
     "signalk-category-hardware",
     "signalk-category-digital-switching",
     "marine",
     "nautic"
   ],
+  "signalk": {
+    "appIcon": "icon.png",
+    "displayName": "Naviop"
+  },
   "signalk-plugin-enabled-by-default": true,
   "author": {
     "name": "Hans Tool",
@@ -31,6 +36,7 @@
   "dependencies": {
     "@canboat/canboatjs": "^1.23.0",
     "axios": "^1.4.0",
-    "debug": "^4.3.4"
+    "debug": "^4.3.4",
+    "socketcan": "^4.2.4"
   }
 }

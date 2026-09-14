@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Naviop</title>
+    <link rel="icon" href="icon.png" />
+    <link rel="stylesheet" href="style.css?v=20260914" />
+  </head>
+  <body>
+    <header>
+      <div class="header-main">
+        <h1>Naviop</h1>
+        <p class="meta" id="statusLine">Loading…</p>
+      </div>
+      <form id="loginForm" class="login-form">
+        <input id="loginUser" name="username" autocomplete="username" placeholder="user" />
+        <input id="loginPass" name="password" type="password" autocomplete="current-password" placeholder="password" />
+        <button type="submit">Log in</button>
+        <span id="loginErr" class="error"></span>
+      </form>
+      <p id="loginWho" class="muted" hidden></p>
+    </header>
+    <main>
+      <div id="panel" class="panel"></div>
+    </main>
+    <script src="app.js?v=20260914"></script>
+  </body>
+</html>

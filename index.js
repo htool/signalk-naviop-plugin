@@ -9,6 +9,10 @@ const axios = require('axios')
 var plugin = {}
 var intervalid
 var n2kOn = require('./lib/n2k-on')
+var naviop127501Fields = require('./lib/pgn-127501')
+var n2kCamelCompat = require('./lib/n2k-camel-compat')
+var webappPanel = require('./lib/webapp-panel')
+var NAVIOP_UNIQUE_NUMBER = 1060571
 
 module.exports = function(app, options) {
   "use strict"
@@ -19,6 +23,12 @@ module.exports = function(app, options) {
 
   var unsubscribes = []
   var mfdFound = false
+  var runtime = {
+    options: null,
+    digiSwitch: null,
+    bankNr: 1,
+    putSwitch: null
+  }
 
   var schema = {
     type: "object",
@@ -47,46 +57,14 @@ module.exports = function(app, options) {
 	        switches: {
 	          title: 'Switches',
 	          properties: {
-			        1: {
-			          type: 'string',
-			          title: 'Switch 1 (connected to Fuse 1)',
-			          default: 'electrical.naviop.switches.1.state'
-			        },
-			        2: {
-			          type: 'string',
-			          title: 'Switch 2 (connected to Fuse 3)',
-			          default: 'electrical.naviop.switches.2.state'
-			        },
-			        3: {
-			          type: 'string',
-			          title: 'Switch 3 (connected to Fuse 5)',
-			          default: 'electrical.naviop.switches.3.state'
-			        },
-			        4: {
-			          type: 'string',
-			          title: 'Switch 4 (connected to Fuse 7)',
-			          default: 'electrical.naviop.switches.4.state'
-			        },
-			        5: {
-			          type: 'string',
-			          title: 'Switch 5 (connected to Fuse 2)',
-			          default: 'electrical.naviop.switches.5.state'
-			        },
-			        6: {
-			          type: 'string',
-			          title: 'Switch 6 (connected to Fuse 9)',
-			          default: 'electrical.naviop.switches.6.state'
-			        },
-			        7: {
-			          type: 'string',
-			          title: 'Switch 7 (connected to Fuse 13)',
-			          default: 'electrical.naviop.switches.7.state'
-			        },
-			        8: {
-			          type: 'string',
-			          title: 'Switch 8 (connected to Fuse 14)',
-			          default: 'electrical.naviop.switches.8.state'
-			        }
+			        1: webappPanel.switchConfigSchema(1, 1),
+			        2: webappPanel.switchConfigSchema(2, 3),
+			        3: webappPanel.switchConfigSchema(3, 5),
+			        4: webappPanel.switchConfigSchema(4, 7),
+			        5: webappPanel.switchConfigSchema(5, 2),
+			        6: webappPanel.switchConfigSchema(6, 9),
+			        7: webappPanel.switchConfigSchema(7, 13),
+			        8: webappPanel.switchConfigSchema(8, 14)
 			      }
 			    },
 			    fuses: {
@@ -149,6 +127,8 @@ module.exports = function(app, options) {
 
     app.debug('Starting plugin');
     app.debug('Options: %j', JSON.stringify(options));
+    runtime.options = options
+    runtime.bankNr = (options.naviop && options.naviop.bank) || 1
 
     // Load device specific init info
     app.debug('Emulate: Naviop AT30 Digital Switching Gateway');
@@ -186,7 +166,7 @@ module.exports = function(app, options) {
       preferredAddress: naviopAddress,
       transmitPGNs: [ 130580, 127500, 127501, 127502 ],
       addressClaim: {
-        'Unique Number': 1060571,
+        'Unique Number': NAVIOP_UNIQUE_NUMBER,
         'Manufacturer Code': 'Navico',
         'Device Function': 140,
         'Device Class': 'Electrical Distribution',
@@ -206,6 +186,9 @@ module.exports = function(app, options) {
         'Certification Level': 2,
         'Load Equivalency': 1
       }
+    })
+    app.prependListener('N2KAnalyzerOut', function (n2k) {
+      n2kCamelCompat(n2k, NAVIOP_UNIQUE_NUMBER)
     })
     simpleCan.start()
     app.setPluginStatus(`Connected to ${canDevice}`)
@@ -229,10 +212,14 @@ module.exports = function(app, options) {
     }
 
 
-    for (var [switchNr, path] of Object.entries(options.naviop.switches)) {
-      path = path.toLowerCase()
-      digiSwitch[bankNr].switches[switchNr] = {path: path, state: 0}
-      localSubscription.subscribe.push({path: path})
+    for (var [switchNr, spec] of Object.entries(options.naviop.switches)) {
+      spec = webappPanel.switchSpec(spec)
+      digiSwitch[bankNr].switches[switchNr] = {
+        path: spec.path,
+        state: 0,
+        webappLabel: spec.webappLabel
+      }
+      if (spec.path) localSubscription.subscribe.push({path: spec.path})
     }
     for (var [fuseNr, path] of Object.entries(options.naviop.fuses)) {
       path = path.toLowerCase()
@@ -241,6 +228,7 @@ module.exports = function(app, options) {
       localSubscription.subscribe.push({path: path})
     }
 
+    runtime.digiSwitch = digiSwitch
     app.debug('digiSwitch: %j', digiSwitch)
     app.debug('localSubscription: %j', localSubscription)
 
@@ -329,11 +317,25 @@ module.exports = function(app, options) {
     }
 
     function sendPutRequest (path, state) {
-      path = 'http://localhost:3000/signalk/v1/api/vessels/self/' + path.replaceAll('.', '/')
       app.debug('sendPutRequest: path: %s  state: %s', path, state)
-      const res = axios.put(path, {
-        "value": state
-      })
+      if (typeof app.putSelfPath === 'function') {
+        app.putSelfPath(path, state, function (err) {
+          if (err) app.debug('putSelfPath %s: %j', path, err)
+        })
+        return
+      }
+      axios.put(
+        'http://localhost:3000/signalk/v1/api/vessels/self/' + path.replaceAll('.', '/'),
+        { value: state }
+      )
+    }
+
+    runtime.putSwitch = function (nr, state) {
+      var key = String(nr)
+      if (!digiSwitch[bankNr] || !digiSwitch[bankNr].switches[key]) {
+        throw new Error('unknown switch ' + nr)
+      }
+      updateSwitchState(bankNr, key, n2kOn(state))
     }
 
     function pushDelta(app, values) {
@@ -458,27 +460,9 @@ module.exports = function(app, options) {
       // simpleCan.sendPGN(pgn)
 
       */
-      simpleCan.sendPGN({
-        pgn: 127501,
-        dst: (typeof mfdAddress != 'undefined' ? mfdAddress : 255),
-        'Instance': bankNr,
-        'Indicator1': swOn(1),
-        'Indicator2': swOn(5),
-        'Indicator3': swOn(2),
-        'Indicator4': fuseOk(1),
-        'Indicator5': swOn(3),
-        'Indicator6': fuseOk(2),
-        'Indicator7': swOn(4),
-        'Indicator8': fuseOk(3),
-        'Indicator9': swOn(6),
-        'Indicator10': fuseOk(4),
-        'Indicator11': fuseOk(5),
-        'Indicator12': fuseOk(6),
-        'Indicator13': swOn(7),
-        'Indicator14': swOn(8),
-        'Indicator15': fuseOk(7),
-        'Indicator16': fuseOk(8)
-      })
+      var pgn501 = naviop127501Fields(swOn, fuseOk, bankNr)
+      pgn501.dst = (typeof mfdAddress != 'undefined' ? mfdAddress : 255)
+      simpleCan.sendPGN(pgn501)
 
       for (var sw = 1; sw <= 8; sw++) {
         var connId = sw - 1
@@ -514,7 +498,7 @@ module.exports = function(app, options) {
       if (!mfdFound && n2k.pgn === 65280 && n2k.dst == 255) {
     		app.debug('Received MFD PGN 65280: %j', n2k)
     		app.debug('Received MFD PGN 65280 fields: %j', n2k.fields)
-        if (n2k.fields['Manufacturer Code'] == 'Navico') {
+        if (n2k.fields['Manufacturer Code'] == 'Navico' || n2k.fields.manufacturerCode == 'Navico') {
     		  app.debug('Found MFD: %d', n2k.src)
           mfdAddress = n2k.src
           mfdFound = true
@@ -575,7 +559,94 @@ module.exports = function(app, options) {
     unsubscribes.forEach(f => f());
     unsubscribes = [];
     clearInterval(intervalid);
+    runtime.options = null
+    runtime.digiSwitch = null
+    runtime.putSwitch = null
     app.debug("Stopped")
+  }
+
+  function sendJson (res, body, status) {
+    res.statusCode = status || 200
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(body))
+  }
+
+  function readJson (req) {
+    return new Promise(function (resolve, reject) {
+      var parsed = req.body
+      var hasParsed =
+        parsed &&
+        typeof parsed === 'object' &&
+        !Buffer.isBuffer(parsed) &&
+        Object.keys(parsed).length > 0
+      if (hasParsed || req.readableEnded) {
+        resolve(hasParsed ? parsed : {})
+        return
+      }
+      var raw = ''
+      req.on('data', function (c) {
+        raw += c
+        if (raw.length > 1e6) reject(new Error('body too large'))
+      })
+      req.on('end', function () {
+        if (!raw) {
+          resolve(parsed && typeof parsed === 'object' && !Buffer.isBuffer(parsed) ? parsed : {})
+          return
+        }
+        try {
+          resolve(JSON.parse(raw))
+        } catch (err) {
+          reject(err)
+        }
+      })
+      req.on('error', reject)
+    })
+  }
+
+  function handleStatus (req, res) {
+    sendJson(res, webappPanel.panelSnapshot(runtime))
+  }
+
+  function applySwitch (nr, state, res) {
+    if (isNaN(nr) || nr < 1 || nr > 8) {
+      sendJson(res, { error: 'unknown switch' }, 400)
+      return
+    }
+    if (!runtime.putSwitch) {
+      sendJson(res, { error: 'plugin not started' }, 409)
+      return
+    }
+    try {
+      runtime.putSwitch(nr, n2kOn(state))
+      sendJson(res, { ok: true, nr: nr, state: n2kOn(state) })
+    } catch (err) {
+      sendJson(res, { error: err.message }, 400)
+    }
+  }
+
+  function handlePutSwitch (req, res) {
+    var nr = parseInt(req.params.nr, 10)
+    readJson(req).then(function (body) {
+      applySwitch(nr, body && body.value, res)
+    }).catch(function (err) {
+      sendJson(res, { error: err.message }, 400)
+    })
+  }
+
+  function handleGetSwitch (req, res) {
+    applySwitch(parseInt(req.params.nr, 10), req.params.state, res)
+  }
+
+  plugin.signalKApiRoutes = function (router) {
+    router.get('/signalk-naviop-plugin/status', handleStatus)
+    router.get('/signalk-naviop-plugin/switches/:nr/:state', handleGetSwitch)
+    return router
+  }
+
+  plugin.registerWithRouter = function (router) {
+    router.get('/status', handleStatus)
+    var write = router.access ? router.access('readwrite') : router
+    write.put('/switches/:nr', handlePutSwitch)
   }
 
   return plugin;

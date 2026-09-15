@@ -57,46 +57,14 @@ module.exports = function(app, options) {
 	        switches: {
 	          title: 'Switches',
 	          properties: {
-			        1: {
-			          type: 'string',
-			          title: 'Switch 1 (connected to Fuse 1)',
-			          default: 'electrical.naviop.switches.1.state'
-			        },
-			        2: {
-			          type: 'string',
-			          title: 'Switch 2 (connected to Fuse 3)',
-			          default: 'electrical.naviop.switches.2.state'
-			        },
-			        3: {
-			          type: 'string',
-			          title: 'Switch 3 (connected to Fuse 5)',
-			          default: 'electrical.naviop.switches.3.state'
-			        },
-			        4: {
-			          type: 'string',
-			          title: 'Switch 4 (connected to Fuse 7)',
-			          default: 'electrical.naviop.switches.4.state'
-			        },
-			        5: {
-			          type: 'string',
-			          title: 'Switch 5 (connected to Fuse 2)',
-			          default: 'electrical.naviop.switches.5.state'
-			        },
-			        6: {
-			          type: 'string',
-			          title: 'Switch 6 (connected to Fuse 9)',
-			          default: 'electrical.naviop.switches.6.state'
-			        },
-			        7: {
-			          type: 'string',
-			          title: 'Switch 7 (connected to Fuse 13)',
-			          default: 'electrical.naviop.switches.7.state'
-			        },
-			        8: {
-			          type: 'string',
-			          title: 'Switch 8 (connected to Fuse 14)',
-			          default: 'electrical.naviop.switches.8.state'
-			        }
+			        1: webappPanel.switchConfigSchema(1, 1),
+			        2: webappPanel.switchConfigSchema(2, 3),
+			        3: webappPanel.switchConfigSchema(3, 5),
+			        4: webappPanel.switchConfigSchema(4, 7),
+			        5: webappPanel.switchConfigSchema(5, 2),
+			        6: webappPanel.switchConfigSchema(6, 9),
+			        7: webappPanel.switchConfigSchema(7, 13),
+			        8: webappPanel.switchConfigSchema(8, 14)
 			      }
 			    },
 			    fuses: {
@@ -244,10 +212,14 @@ module.exports = function(app, options) {
     }
 
 
-    for (var [switchNr, path] of Object.entries(options.naviop.switches)) {
-      path = path.toLowerCase()
-      digiSwitch[bankNr].switches[switchNr] = {path: path, state: 0}
-      localSubscription.subscribe.push({path: path})
+    for (var [switchNr, spec] of Object.entries(options.naviop.switches)) {
+      spec = webappPanel.switchSpec(spec)
+      digiSwitch[bankNr].switches[switchNr] = {
+        path: spec.path,
+        state: 0,
+        webappLabel: spec.webappLabel
+      }
+      if (spec.path) localSubscription.subscribe.push({path: spec.path})
     }
     for (var [fuseNr, path] of Object.entries(options.naviop.fuses)) {
       path = path.toLowerCase()
@@ -345,11 +317,17 @@ module.exports = function(app, options) {
     }
 
     function sendPutRequest (path, state) {
-      path = 'http://localhost:3000/signalk/v1/api/vessels/self/' + path.replaceAll('.', '/')
       app.debug('sendPutRequest: path: %s  state: %s', path, state)
-      const res = axios.put(path, {
-        "value": state
-      })
+      if (typeof app.putSelfPath === 'function') {
+        app.putSelfPath(path, state, function (err) {
+          if (err) app.debug('putSelfPath %s: %j', path, err)
+        })
+        return
+      }
+      axios.put(
+        'http://localhost:3000/signalk/v1/api/vessels/self/' + path.replaceAll('.', '/'),
+        { value: state }
+      )
     }
 
     runtime.putSwitch = function (nr, state) {
@@ -629,8 +607,7 @@ module.exports = function(app, options) {
     sendJson(res, webappPanel.panelSnapshot(runtime))
   }
 
-  function handlePutSwitch (req, res) {
-    var nr = parseInt(req.params.nr, 10)
+  function applySwitch (nr, state, res) {
     if (isNaN(nr) || nr < 1 || nr > 8) {
       sendJson(res, { error: 'unknown switch' }, 400)
       return
@@ -639,17 +616,30 @@ module.exports = function(app, options) {
       sendJson(res, { error: 'plugin not started' }, 409)
       return
     }
+    try {
+      runtime.putSwitch(nr, n2kOn(state))
+      sendJson(res, { ok: true, nr: nr, state: n2kOn(state) })
+    } catch (err) {
+      sendJson(res, { error: err.message }, 400)
+    }
+  }
+
+  function handlePutSwitch (req, res) {
+    var nr = parseInt(req.params.nr, 10)
     readJson(req).then(function (body) {
-      var state = n2kOn(body && body.value)
-      runtime.putSwitch(nr, state)
-      sendJson(res, { ok: true, nr: nr, state: state })
+      applySwitch(nr, body && body.value, res)
     }).catch(function (err) {
       sendJson(res, { error: err.message }, 400)
     })
   }
 
+  function handleGetSwitch (req, res) {
+    applySwitch(parseInt(req.params.nr, 10), req.params.state, res)
+  }
+
   plugin.signalKApiRoutes = function (router) {
     router.get('/signalk-naviop-plugin/status', handleStatus)
+    router.get('/signalk-naviop-plugin/switches/:nr/:state', handleGetSwitch)
     return router
   }
 

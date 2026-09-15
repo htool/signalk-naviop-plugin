@@ -53,7 +53,7 @@ jobs:
           if [ -f "$NPMRC_PATH" ]; then
             sed -i '/_authToken/d' "$NPMRC_PATH"
           fi
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm test
       - name: Resolve package version
         id: pkg

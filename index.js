@@ -54,64 +54,8 @@ module.exports = function(app, options) {
             description: 'The bank number can be used to avoid interferring with an existing bank number',
 	          default: 1
 	        },
-	        switches: {
-	          title: 'Switches',
-	          properties: {
-			        1: webappPanel.switchConfigSchema(1, 1),
-			        2: webappPanel.switchConfigSchema(2, 3),
-			        3: webappPanel.switchConfigSchema(3, 5),
-			        4: webappPanel.switchConfigSchema(4, 7),
-			        5: webappPanel.switchConfigSchema(5, 2),
-			        6: webappPanel.switchConfigSchema(6, 9),
-			        7: webappPanel.switchConfigSchema(7, 13),
-			        8: webappPanel.switchConfigSchema(8, 14)
-			      }
-			    },
-			    fuses: {
-			      title: 'Fuses',
-			      properties: {
-			        1: {
-			          type: 'string',
-			          title: 'Fuse 1',
-			          default: 'electrical.naviop.fuses.1.state'
-			        },
-			        2: {
-			          type: 'string',
-			          title: 'Fuse 2',
-			          default: 'electrical.naviop.fuses.2.state'
-			        },
-			        3: {
-			          type: 'string',
-			          title: 'Fuse 3',
-			          default: 'electrical.naviop.fuses.3.state'
-			        },
-			        4: {
-			          type: 'string',
-			          title: 'Fuse 4',
-			          default: 'electrical.naviop.fuses.4.state'
-			        },
-			        5: {
-			          type: 'string',
-			          title: 'Fuse 5',
-			          default: 'electrical.naviop.fuses.5.state'
-			        },
-			        6: {
-			          type: 'string',
-			          title: 'Fuse 6',
-			          default: 'electrical.naviop.fuses.6.state'
-			        },
-			        7: {
-			          type: 'string',
-			          title: 'Fuse 7',
-			          default: 'electrical.naviop.fuses.7.state'
-	            },
-			        8: {
-			          type: 'string',
-			          title: 'Fuse 8',
-			          default: 'electrical.naviop.fuses.8.state'
-			        }
-			      }
-			    }
+	        switches: webappPanel.switchesSchema(),
+			    fuses: webappPanel.fusesSchema()
 			  }
 	    }
 	  }
@@ -212,20 +156,19 @@ module.exports = function(app, options) {
     }
 
 
-    for (var [switchNr, spec] of Object.entries(options.naviop.switches)) {
-      spec = webappPanel.switchSpec(spec)
-      digiSwitch[bankNr].switches[switchNr] = {
-        path: spec.path,
+    for (var switchItem of webappPanel.parseSwitchList(options.naviop.switches)) {
+      digiSwitch[bankNr].switches[switchItem.nr] = {
+        path: switchItem.path,
         state: 0,
-        webappLabel: spec.webappLabel
+        webappLabel: switchItem.webappLabel,
+        booleanPath: !!switchItem.booleanPath
       }
-      if (spec.path) localSubscription.subscribe.push({path: spec.path})
+      if (switchItem.path) localSubscription.subscribe.push({path: switchItem.path})
     }
-    for (var [fuseNr, path] of Object.entries(options.naviop.fuses)) {
-      path = path.toLowerCase()
+    for (var fuseItem of webappPanel.parseFuseList(options.naviop.fuses)) {
       // Healthy fuse = On. Loop S treats 127501 Off as blown (red keys).
-      digiSwitch[bankNr].fuses[fuseNr] = {path: path, state: 1}
-      localSubscription.subscribe.push({path: path})
+      digiSwitch[bankNr].fuses[fuseItem.nr] = {path: fuseItem.path, state: 1}
+      if (fuseItem.path) localSubscription.subscribe.push({path: fuseItem.path})
     }
 
     runtime.digiSwitch = digiSwitch
@@ -272,11 +215,15 @@ module.exports = function(app, options) {
         app.debug('Updating digiSwitch[%d].switches[%d].state to %d', bankNr, instance, state)
         digiSwitch[bankNr].switches[instance].state = state
         var path = digiSwitch[bankNr].switches[instance].path
+        var pathVal = webappPanel.pathValue(
+          state,
+          digiSwitch[bankNr].switches[instance].booleanPath
+        )
         var values = []
-        values.push({path: path, value: state})
+        values.push({path: path, value: pathVal})
         pushDelta(app, values)
-        app.debug('PUT switch path %s -> %s', path, state)
-        sendPutRequest(path, state)
+        app.debug('PUT switch path %s -> %s', path, pathVal)
+        sendPutRequest(path, pathVal)
       }
     }
 
